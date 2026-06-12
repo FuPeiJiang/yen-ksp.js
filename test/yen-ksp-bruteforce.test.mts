@@ -2,16 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-    breadth_first_search,
-    yen_ksp,
-    yen_ksp_initialize_state,
-    make_csr,
-} from "../dist/yen-ksp.mjs";
-
-import {
-    brute_force_simple_paths,
-    path_key,
     assert_valid_path,
+    brute_force_simple_paths,
+    make_path_finder,
+    path_key,
 } from "./helpers.mts";
 
 import type {
@@ -75,22 +69,12 @@ test("fixed cyclic graph matches brute force", () => {
 
     const start = 0;
     const end = 3;
-
     const expected = brute_force_simple_paths(adjacency, start, end);
-
-    const edges = make_csr(adjacency);
-    const state = yen_ksp_initialize_state(adjacency.length);
-
-    const actual = [...yen_ksp(
-        start,
-        end,
-        breadth_first_search,
-        edges,
-        state,
-    )];
+    const { graph, find_paths } = make_path_finder(adjacency);
+    const actual = [...find_paths(start, [end])];
 
     for (const path of actual) {
-        assert_valid_path(adjacency, path, start, end);
+        assert_valid_path(graph, path, start, end);
     }
 
     assert_nondecreasing_cost(actual);
@@ -117,19 +101,11 @@ test("random small graphs match brute force", () => {
             continue;
         }
 
-        const edges = make_csr(adjacency);
-        const state = yen_ksp_initialize_state(adjacency.length);
-
-        const actual = [...yen_ksp(
-            start,
-            end,
-            breadth_first_search,
-            edges,
-            state,
-        )];
+        const { graph, find_paths } = make_path_finder(adjacency);
+        const actual = [...find_paths(start, [end])];
 
         for (const path of actual) {
-            assert_valid_path(adjacency, path, start, end);
+            assert_valid_path(graph, path, start, end);
         }
 
         assert_nondecreasing_cost(actual);

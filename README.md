@@ -2,7 +2,7 @@
 
 K shortest simple paths for directed, unweighted graphs.
 
-This package provides a small, allocation-conscious implementation of Yen-style K shortest path enumeration. It uses CSR-style graph storage internally and exposes both a convenient wrapper and lower-level functions for reusing state across calls.
+This package provides a small, allocation-conscious implementation of Yen-style K shortest path enumeration. Graphs are stored in CSR form, and a reusable path finder keeps the temporary search state for repeated queries against the same graph.
 
 ## Installation
 
@@ -10,12 +10,12 @@ This package provides a small, allocation-conscious implementation of Yen-style 
 npm install yen-ksp
 ```
 
-## Basic usage
+## Basic Usage
 
 ```js
 import {
-    breadth_first_search,
-    yen_ksp_wrapper,
+    make_csr_graph_unweighted,
+    yen_ksp_unweighted,
 } from "yen-ksp";
 
 const adjacency = [
@@ -25,12 +25,10 @@ const adjacency = [
     [],
 ];
 
-const paths = [...yen_ksp_wrapper(
-    0,
-    3,
-    breadth_first_search,
-    adjacency,
-)];
+const graph = make_csr_graph_unweighted(adjacency);
+const find_paths = yen_ksp_unweighted(graph);
+
+const paths = [...find_paths(0, [3])];
 
 console.log(paths);
 ```
@@ -41,18 +39,18 @@ Output:
 [
     {
         nodes: [0, 1, 3],
-        edges: [0, 0],
+        edges: [0, 2],
     },
     {
         nodes: [0, 2, 3],
-        edges: [1, 0],
+        edges: [1, 3],
     },
 ]
 ```
 
-## Graph format
+## Graph Format
 
-Graphs are represented as adjacency lists:
+Build a graph from an adjacency list with `make_csr_graph_unweighted`.
 
 ```js
 const adjacency = [
@@ -61,13 +59,27 @@ const adjacency = [
     [3],    // node 2 has an edge to node 3
     [],     // node 3 has no outgoing edges
 ];
+
+const graph = make_csr_graph_unweighted(adjacency);
+
+console.log([...graph.offsets]);
+// [0, 2, 3, 4, 4]
+
+console.log([...graph.edges]);
+// [1, 2, 3, 3]
 ```
 
-Each node is identified by its numeric index.
+Each node is identified by its numeric index. The graph is directed. For an undirected graph, add edges in both directions.
 
-The graph is directed. If you want an undirected graph, add edges in both directions.
+If you already know the number of edges, you can pass it as the second argument:
 
-## Path format
+```js
+const graph = make_csr_graph_unweighted(adjacency, 4);
+```
+
+The function throws if the supplied `edge_count` does not match the adjacency list.
+
+## Path Format
 
 Each yielded path has this shape:
 
@@ -78,18 +90,9 @@ Each yielded path has this shape:
 }
 ```
 
-For example:
+The `nodes` array stores the path's node sequence.
 
-```js
-{
-    nodes: [0, 2, 3],
-    edges: [1, 0],
-}
-```
-
-The `nodes` array stores the path’s node sequence.
-
-The `edges` array stores local outgoing edge indices. So in this graph:
+The `edges` array stores absolute CSR edge indices into `graph.edges`. For example, in this graph:
 
 ```js
 const adjacency = [
@@ -98,51 +101,44 @@ const adjacency = [
     [3],
     [],
 ];
+
+const graph = make_csr_graph_unweighted(adjacency);
+// graph.edges is [1, 2, 3, 3]
 ```
 
-The path `0 -> 2 -> 3` has edge indices `[1, 0]`, because:
+The path `0 -> 2 -> 3` has edge indices `[1, 3]`, because:
 
 ```js
-adjacency[0][1] === 2;
-adjacency[2][0] === 3;
+graph.edges[1] === 2;
+graph.edges[3] === 3;
 ```
 
-## Taking only the first K paths
+To check whether an edge index belongs to a node's outgoing range:
 
-`yen_ksp` and `yen_ksp_wrapper` return generators. The generator is lazy, so paths are only computed as they are requested.
+```js
+const from = 0;
+const edge_index = 1;
 
-In modern runtimes with iterator helpers, you can use `take()`:
-
-```js id="f4tlz3"
-import {
-    breadth_first_search,
-    yen_ksp_wrapper,
-} from "yen-ksp";
-
-const adjacency = [
-    [1, 2, 3],
-    [4],
-    [4],
-    [4],
-    [],
-];
-
-const first_two = yen_ksp_wrapper(
-    0,
-    4,
-    breadth_first_search,
-    adjacency,
-).take(2).toArray();
-
-console.log(first_two);
+edge_index >= graph.offsets[from] &&
+edge_index < graph.offsets[from + 1];
 ```
 
-For older runtimes, or if you prefer not to rely on iterator helpers, stop the generator manually:
+## Taking Only The First K Paths
 
-```js id="rmct52"
+`find_paths(start, endpoints)` returns a generator. Paths are computed lazily as the generator is consumed.
+
+In runtimes with iterator helpers, you can use `take()`:
+
+```js
+const first_two = find_paths(0, [4]).take(2).toArray();
+```
+
+Or stop iteration manually:
+
+```js
 const first_two = [];
 
-for (const path of yen_ksp_wrapper(0, 4, breadth_first_search, adjacency)) {
+for (const path of find_paths(0, [4])) {
     first_two.push(path);
 
     if (first_two.length === 2) {
@@ -151,130 +147,92 @@ for (const path of yen_ksp_wrapper(0, 4, breadth_first_search, adjacency)) {
 }
 ```
 
-Both versions stop iteration after two paths, so the remaining paths are not computed.
+Both versions stop after two paths, so the remaining paths are not computed.
 
-## Lower-level usage
+## Reusing A Finder
 
-For repeated searches, you can build the CSR graph and reusable state manually.
+Call `yen_ksp_unweighted(graph)` once per graph. The returned finder owns reusable temporary arrays, so repeated searches against the same graph do not need to rebuild search state.
 
 ```js
-import {
-    breadth_first_search,
-    make_csr,
-    yen_ksp,
-    yen_ksp_initialize_state,
-} from "yen-ksp";
-
-const adjacency = [
+const graph = make_csr_graph_unweighted([
     [1, 2],
     [3],
-    [3],
+    [3, 4],
     [],
-];
+    [3],
+]);
 
-const edges = make_csr(adjacency);
-const state = yen_ksp_initialize_state(adjacency.length);
+const find_paths = yen_ksp_unweighted(graph);
 
-const paths = [...yen_ksp(
-    0,
-    3,
-    breadth_first_search,
-    edges,
-    state,
-)];
+const from_zero = [...find_paths(0, [3])];
+const from_two = [...find_paths(2, [3])];
 ```
 
-This avoids rebuilding the internal graph representation and temporary arrays yourself.
+Do not consume multiple generators from the same finder at the same time. Finish one search before starting or advancing another one.
 
-## Choosing the nearest endpoint first
+## Multiple Endpoints
 
-For advanced use cases, you can start with multiple possible end nodes, let the first shortest-path search choose the nearest reachable endpoint, and then continue Yen's algorithm using only that chosen endpoint.
+Pass one or more endpoint node indices as the second argument.
 
-This is useful when you have several acceptable terminal nodes, but once the nearest one is found, you want the remaining paths to target that same endpoint.
-
-```js id="ooi4sr"
-import {
-    breadth_first_search,
-    make_csr,
-    yen_ksp,
-    yen_ksp_initialize_state,
-} from "yen-ksp";
-
+```js
 const adjacency = [
     [1, 2],
     [3],
     [4],
     [],
-    [],
+    [3],
 ];
 
-const start = 0;
-const endpoints = [3, 4];
+const graph = make_csr_graph_unweighted(adjacency);
+const find_paths = yen_ksp_unweighted(graph);
 
-const edges = make_csr(adjacency);
-const state = yen_ksp_initialize_state(adjacency.length);
-
-// Mark all candidate endpoints as terminal nodes for the first BFS.
-for (const endpoint of endpoints) {
-    state.visited[endpoint] = -1;
-}
-
-// Pass undefined as the end node because the terminal nodes
-// have already been marked in state.visited.
-const iterator = yen_ksp(
-    start,
-    undefined,
-    breadth_first_search,
-    edges,
-    state,
-);
-
-const first_result = iterator.next();
-
-if (!first_result.done) {
-    const first_path = first_result.value;
-    const chosen_endpoint = first_path.nodes[first_path.nodes.length - 1];
-
-    // Clear the temporary multi-endpoint markers.
-    for (const endpoint of endpoints) {
-        state.visited[endpoint] = 0;
-    }
-
-    // Continue the generator with only the chosen endpoint marked.
-    state.visited[chosen_endpoint] = -1;
-
-    const paths = [
-        first_path,
-        ...iterator,
-    ];
-
-    console.log(paths);
-}
+const paths = [...find_paths(0, [3, 4])];
 ```
 
-This relies on the internal convention used by `breadth_first_search`: `state.visited[index] === -1` marks a terminal node.
+The first shortest-path search may stop at any listed endpoint. After that, the remaining paths are generated for that same chosen endpoint.
 
-The first search may stop at any candidate endpoint. After that, the remaining paths are generated only for the endpoint reached by the first path.
+This does not enumerate the K shortest paths to any endpoint. It enumerates:
 
-This does **not** enumerate the K shortest paths to any endpoint. It enumerates:
+1. the shortest path from `start` to the nearest reached endpoint, then
+2. the remaining simple paths from `start` to that same endpoint.
 
-1. the shortest path from `start` to the nearest marked endpoint, then
-2. the remaining simple paths from `start` to that same chosen endpoint.
+If `start` is one of the endpoints, the finder yields the zero-length path:
 
+```js
+[...find_paths(0, [0])];
+// [{ nodes: [0], edges: [] }]
+```
 
 ## API
 
-### `yen_ksp_wrapper(start, end, shortest_path, adjacency)`
+### `make_csr_graph_unweighted(adjacency, edge_count?)`
 
-Convenience wrapper that builds CSR storage and state automatically.
+Converts an adjacency list into CSR graph storage.
 
 ```ts
-function yen_ksp_wrapper(
-    start_node_index: number,
-    end_node_index: number,
-    shortest_path: shortest_path_t,
+function make_csr_graph_unweighted(
     adjacency: readonly (readonly number[])[],
-): Generator<{
+    edge_count?: number,
+): {
+    offsets: Int32Array;
+    edges: Int32Array;
+};
+```
+
+`offsets[node]` and `offsets[node + 1]` define the half-open range of outgoing edge indices for `node`. `edges[edge_index]` stores the target node for that edge.
+
+### `yen_ksp_unweighted(graph)`
+
+Creates a reusable path finder for an unweighted CSR graph.
+
+```ts
+function yen_ksp_unweighted(graph: {
+    offsets: Int32Array;
+    edges: Int32Array;
+}): (
+    start_node_index: number,
+    end_node_indices: number[],
+) => Generator<{
     nodes: number[];
     edges: number[];
 }, void, unknown>;
@@ -283,144 +241,11 @@ function yen_ksp_wrapper(
 Example:
 
 ```js
-const paths = [...yen_ksp_wrapper(
-    0,
-    3,
-    breadth_first_search,
-    adjacency,
-)];
+const graph = make_csr_graph_unweighted(adjacency);
+const find_paths = yen_ksp_unweighted(graph);
+
+const paths = [...find_paths(start, [end])];
 ```
-
-### `yen_ksp(start, end, shortest_path, edges, state)`
-
-Lower-level generator.
-
-```ts
-function yen_ksp(
-    start_node_index: number,
-    end_node_index: number | undefined,
-    shortest_path: shortest_path_t,
-    edges: Int32Array,
-    state: ReturnType<typeof yen_ksp_initialize_state>,
-): Generator<{
-    nodes: number[];
-    edges: number[];
-}, void, unknown>;
-```
-
-Use this when you want to reuse CSR storage and temporary arrays.
-
-### `make_csr(adjacency)`
-
-Converts an adjacency list into the internal CSR-style `Int32Array` representation.
-
-```ts
-function make_csr(
-    adjacency: readonly (readonly number[])[],
-): Int32Array;
-```
-
-### `yen_ksp_initialize_state(nodes_length)`
-
-Creates reusable temporary arrays.
-
-```ts
-function yen_ksp_initialize_state(nodes_length: number): {
-    parent: Int32Array;
-    edge_indices: Int32Array;
-    visited: Int32Array;
-    excluded_edges: Uint8Array;
-    search_stack: Int32Array;
-};
-```
-
-### `breadth_first_search(...)`
-
-Default shortest path function for unweighted graphs.
-
-```ts
-function breadth_first_search(
-    start_node_index: number,
-    edges: Int32Array,
-    excluded_edges: Uint8Array,
-    edge_indices: Int32Array,
-    search_stack: Int32Array,
-    parent: Int32Array,
-    visited: Int32Array,
-    visited_id: number,
-): number;
-```
-
-Most users should pass this to `yen_ksp` or `yen_ksp_wrapper`.
-
-```js
-const paths = [...yen_ksp_wrapper(
-    start,
-    end,
-    breadth_first_search,
-    adjacency,
-)];
-```
-
-### `MinHeap`
-
-A small static binary min-heap helper used internally by the path generator.
-
-```ts
-class MinHeap {
-    static push<T>(
-        arr: T[],
-        x: T,
-        less: (a: T, b: T) => boolean,
-    ): void;
-
-    static pop<T>(
-        arr: T[],
-        less: (a: T, b: T) => boolean,
-    ): T | undefined;
-}
-```
-
-`MinHeap` operates directly on a normal JavaScript array. The `less` callback defines the heap ordering.
-
-```js
-import { MinHeap } from "yen-ksp";
-
-const heap = [];
-
-const less = (a, b) => a.cost < b.cost;
-
-MinHeap.push(heap, { cost: 3, value: "c" }, less);
-MinHeap.push(heap, { cost: 1, value: "a" }, less);
-MinHeap.push(heap, { cost: 2, value: "b" }, less);
-
-console.log(MinHeap.pop(heap, less));
-// { cost: 1, value: "a" }
-
-console.log(MinHeap.pop(heap, less));
-// { cost: 2, value: "b" }
-```
-
-For TypeScript:
-
-```ts
-import { MinHeap } from "yen-ksp";
-
-type Item = {
-    cost: number;
-    value: string;
-};
-
-const heap: Item[] = [];
-
-const less = (a: Item, b: Item): boolean => a.cost < b.cost;
-
-MinHeap.push(heap, { cost: 3, value: "c" }, less);
-MinHeap.push(heap, { cost: 1, value: "a" }, less);
-
-const first = MinHeap.pop(heap, less);
-```
-
 
 ## TypeScript
 
@@ -428,8 +253,8 @@ The package includes TypeScript declarations.
 
 ```ts
 import {
-    breadth_first_search,
-    yen_ksp_wrapper,
+    make_csr_graph_unweighted,
+    yen_ksp_unweighted,
 } from "yen-ksp";
 
 const adjacency: readonly (readonly number[])[] = [
@@ -439,21 +264,17 @@ const adjacency: readonly (readonly number[])[] = [
     [],
 ];
 
-const paths = [...yen_ksp_wrapper(
-    0,
-    3,
-    breadth_first_search,
-    adjacency,
-)];
+const graph = make_csr_graph_unweighted(adjacency);
+const find_paths = yen_ksp_unweighted(graph);
+const paths = [...find_paths(0, [3])];
 ```
 
 ## Notes
 
 * Graphs are directed.
 * Nodes are numeric indices.
-* The default `breadth_first_search` is for unweighted graphs.
 * Paths are simple: a yielded path does not repeat nodes.
-* Path cost is the number of edges when using `breadth_first_search`.
+* Path cost is the number of edges.
 * Results are yielded in nondecreasing path length order.
 * Iteration is lazy, so you can stop after the first `K` paths.
 
