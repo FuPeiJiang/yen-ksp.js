@@ -170,6 +170,60 @@ const from_two = [...find_paths(2, [3])];
 
 Do not consume multiple generators from the same finder at the same time. Finish one search before starting or advancing another one.
 
+## Implementation Notes
+
+This implementation is specialized for unweighted graphs. Shortest-path searches use BFS, and candidate paths are stored in buckets keyed by integer path length.
+
+The implementation also uses a Lawler-style modification to avoid generating duplicate candidates.
+
+In the original form of Yen's algorithm, when a new path is accepted, the algorithm may try spur searches from prefixes that were already explored earlier. Those searches can only recreate candidates that have already been generated, so Lawler's modification records where the accepted path branched and resumes spur generation from that point instead of starting again from the beginning.
+
+A useful way to visualize the exclusion state is as a trie of accepted paths. Each trie node represents a root prefix. The children of that trie node are the next nodes that have already followed that prefix, so they correspond to the blocked outgoing edges in Yen's original algorithm.
+
+For example, suppose a path is accepted by taking this detour from a prefix ending at `A`:
+
+```txt id="fo8hv0"
+A -> B -> C -> T
+```
+
+The prefix ending at `A` already existed, so it may have several blocked next hops. When this path is accepted, `B` is added to that list:
+
+```txt id="x0n7a7"
+prefix ... -> A
+blocked next hops: [..., B]
+```
+
+This is the only place where a multi-entry blocked-next-hop list is needed. The newly accepted path is processed starting at the spur node, and only the spur node can already have other branches recorded for the same prefix.
+
+Every node after the spur node is reached through a new prefix.
+
+The prefix ending at `B` is new:
+
+```txt id="2dz43k"
+... -> A -> B
+```
+
+So from `B`, only the next hop from the current path needs to be blocked:
+
+```txt id="3mfyux"
+blocked next hops: [C]
+```
+
+Likewise, the prefix ending at `C` is also new:
+
+```txt id="ou7mdj"
+... -> A -> B -> C
+```
+
+So from `C`, only `T` needs to be blocked:
+
+```txt id="ninuia"
+blocked next hops: [T]
+```
+
+There is no need to build an explicit trie for this. The implementation carries the multi-entry blocked-next-hop list only at the branch point that produced the path. Every later prefix on the detour is new, so its exclusion state starts with exactly one blocked next hop.
+
+
 ## Multiple Endpoints
 
 Pass one or more endpoint node indices as the second argument.

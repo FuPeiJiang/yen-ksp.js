@@ -3,7 +3,7 @@ function breadth_first_search(
     end_node_index: number | undefined,
     offsets: Int32Array,
     edges: Int32Array,
-    excluded_nodes: number[],
+    excluded_first_hops: number[],
     parent: Int32Array,
     edge_indices: Int32Array,
     search_stack: Int32Array,
@@ -12,8 +12,8 @@ function breadth_first_search(
 ) {
     let search_stack_push_index = 0
 
-    for (let i = 0; i < excluded_nodes.length; ++i) {
-        visited[excluded_nodes[i]] = visited_id
+    for (let i = 0; i < excluded_first_hops.length; ++i) {
+        visited[excluded_first_hops[i]] = visited_id
     }
 
     for (let i = offsets[start_node_index], end = offsets[start_node_index + 1]; i < end; ++i) {
@@ -32,8 +32,8 @@ function breadth_first_search(
         ++search_stack_push_index
     }
 
-    for (let i = 0; i < excluded_nodes.length; ++i) {
-        visited[excluded_nodes[i]] = 0
+    for (let i = 0; i < excluded_first_hops.length; ++i) {
+        visited[excluded_first_hops[i]] = 0
     }
 
     if (end_node_index !== undefined) {
@@ -207,7 +207,7 @@ function* yen_ksp_unweighted_paths(
         curr_B: number[],
         curr_B_edges_array: number[],
         i: number,
-        excludedNodes: number[],
+        excluded_first_hops: number[],
         new_curr_A: number[] | undefined,
         new_curr_edges_array: number[] | undefined,
     }
@@ -223,7 +223,7 @@ function* yen_ksp_unweighted_paths(
         new_curr_edges_array.push(...curr_B_edges_array.reverse())
         bucket_entry.new_curr_edges_array = new_curr_edges_array
     }
-    let curr_excludedNodes: number[] = []
+    let curr_excluded_first_hops: number[] = []
 
     let startingI = 0
     let curr_min_length = curr_A.length
@@ -231,8 +231,8 @@ function* yen_ksp_unweighted_paths(
     while (true) {
         // curr_A always longer than length=1 since length=1 is checked at start, and length is only increasing
         visited[tail_index] = -1
-        for (let i = startingI, excludedNodes = curr_excludedNodes, endI = curr_A.length - 1; i < endI; ++i) {
-            excludedNodes.push(curr_A[i+1])
+        for (let i = startingI, excluded_first_hops = curr_excluded_first_hops, endI = curr_A.length - 1; i < endI; ++i) {
+            excluded_first_hops.push(curr_A[i+1])
 
             visited_id = inc_visited_id(visited_id, visited, tail_index)
 
@@ -245,7 +245,7 @@ function* yen_ksp_unweighted_paths(
                 tail_index,
                 offsets,
                 edges,
-                excludedNodes,
+                excluded_first_hops,
                 parent,
                 edge_indices,
                 search_stack,
@@ -264,7 +264,7 @@ function* yen_ksp_unweighted_paths(
                     curr_B,
                     curr_B_edges_array,
                     i,
-                    excludedNodes,
+                    excluded_first_hops,
                     new_curr_A: undefined,
                     new_curr_edges_array: undefined
                 }
@@ -281,7 +281,7 @@ function* yen_ksp_unweighted_paths(
 
             }
 
-            excludedNodes = []
+            excluded_first_hops = []
         }
 
         {
@@ -310,7 +310,7 @@ function* yen_ksp_unweighted_paths(
             curr_A = bucket_entry.new_curr_A!
             curr_edges_array = bucket_entry.new_curr_edges_array!
 
-            curr_excludedNodes = bucket_entry.excludedNodes
+            curr_excluded_first_hops = bucket_entry.excluded_first_hops
         }
     }
 
