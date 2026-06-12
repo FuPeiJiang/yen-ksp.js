@@ -1,0 +1,33 @@
+{
+  "name": "yen-ksp",
+  "version": "0.1.0",
+  "description": "Yen's K shortest paths algorithm for TypeScript/JavaScript.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/yen-ksp.d.mts",
+      "import": "./dist/yen-ksp.mjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsgo -p tsconfig.json",
+    "typecheck": "tsgo -p tsconfig.json --noEmit",
+    "test": "npm run build && tsgo -p test/tsconfig.json --noEmit && node --test test/*.test.mts",
+    "pack:dry": "npm pack --dry-run",
+    "prepublishOnly": "npm test && npm run pack:dry"
+  },
+  "devDependencies": {
+    "@typescript/native-preview": "beta",
+    "@types/node": "^25.9.2"
+  },
+  "engines": {
+    "node": ">=26"
+  },
+  "sideEffects": false,
+  "license": "MIT"
+}
