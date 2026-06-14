@@ -16,6 +16,8 @@ function breadth_first_search(
         visited[excluded_first_hops[i]] = visited_id
     }
 
+    visited[start_node_index] = visited_id
+
     for (let i = offsets[start_node_index], end = offsets[start_node_index + 1]; i < end; ++i) {
         const node_index = edges[i]
         const num = visited[node_index]
@@ -40,7 +42,6 @@ function breadth_first_search(
         visited[end_node_index] = -1
     }
 
-    visited[start_node_index] = visited_id
     for (let search_stack_curr_index = 0; search_stack_curr_index < search_stack_push_index; ++search_stack_curr_index) {
         const current_node_index = search_stack[search_stack_curr_index]
         for (let i = offsets[current_node_index], end = offsets[current_node_index + 1]; i < end; ++i) {

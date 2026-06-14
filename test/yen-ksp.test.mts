@@ -64,6 +64,29 @@ test("graph with cycles returns simple paths", () => {
     assert.deepEqual(actual, expected);
 });
 
+test("self-loop does not repeat the same path forever", () => {
+    const adjacency: Adjacency = [
+        [0, 1],
+        [2],
+        [],
+    ];
+
+    const { graph, find_paths } = make_path_finder(adjacency);
+    const paths = find_paths(0, [2]).take(10).toArray();
+
+    for (const path of paths) {
+        assert_valid_path(graph, path, 0, 2);
+    }
+
+    assert.equal(new Set(paths.map(path_key)).size, paths.length);
+    assert.deepEqual(
+        paths.map(path => path.nodes),
+        [
+            [0, 1, 2],
+        ],
+    );
+});
+
 test("no path yields no paths", () => {
     const adjacency: Adjacency = [
         [1],
