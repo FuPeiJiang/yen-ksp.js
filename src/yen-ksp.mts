@@ -189,39 +189,39 @@ function* yen_ksp_unweighted_paths(
         return
     }
 
-    let { parent_array: curr_A, edges_array: curr_edges_array } = get_parent_array(tail_index, start_node_index, parent, edge_indices)
+    let { parent_array: curr_A, edges_array: curr_A_edges_array } = get_parent_array(tail_index, start_node_index, parent, edge_indices)
 
     curr_A.reverse()
-    curr_edges_array.reverse()
+    curr_A_edges_array.reverse()
 
     for (let i = 0; i < end_node_indices.length; ++i) {
         visited[end_node_indices[i]] = 0
     }
     state.visited_id = visited_id
-    yield { nodes: curr_A, edges: curr_edges_array }
+    yield { nodes: curr_A, edges: curr_A_edges_array }
     visited_id = state.visited_id
 
     type bucket_entry_t = {
         curr_A: number[],
-        curr_edges_array: number[],
+        curr_A_edges_array: number[],
         curr_B: number[],
         curr_B_edges_array: number[],
         i: number,
         excluded_first_hops: number[],
         new_curr_A: number[] | undefined,
-        new_curr_edges_array: number[] | undefined,
+        new_curr_A_edges_array: number[] | undefined,
     }
 
     const buckets_priority_queue = new Bucket_Ascending_Only_Priority_Queue<bucket_entry_t>()
     function materialize_bucket_entry(bucket_entry: bucket_entry_t) {
-        const { curr_A: branched_A, curr_edges_array: branched_edges_array, curr_B, curr_B_edges_array, i } = bucket_entry
-        const new_curr_A = branched_A.slice(0, i)
+        const { curr_A, curr_A_edges_array, curr_B, curr_B_edges_array, i } = bucket_entry
+        const new_curr_A = curr_A.slice(0, i)
         new_curr_A.push(...curr_B.reverse())
         bucket_entry.new_curr_A = new_curr_A
 
-        const new_curr_edges_array = branched_edges_array.slice(0, i)
-        new_curr_edges_array.push(...curr_B_edges_array.reverse())
-        bucket_entry.new_curr_edges_array = new_curr_edges_array
+        const new_curr_A_edges_array = curr_A_edges_array.slice(0, i)
+        new_curr_A_edges_array.push(...curr_B_edges_array.reverse())
+        bucket_entry.new_curr_A_edges_array = new_curr_A_edges_array
     }
     let curr_excluded_first_hops: number[] = []
 
@@ -240,18 +240,7 @@ function* yen_ksp_unweighted_paths(
                 visited[curr_A[j]] = visited_id
             }
 
-            const B_index = breadth_first_search(
-                curr_A[i],
-                tail_index,
-                offsets,
-                edges,
-                excluded_first_hops,
-                parent,
-                edge_indices,
-                search_stack,
-                visited,
-                visited_id
-            )
+            const B_index = breadth_first_search(curr_A[i], tail_index, offsets, edges, excluded_first_hops, parent, edge_indices, search_stack, visited, visited_id)
 
             if (B_index !== -1) {
                 const { parent_array: curr_B, edges_array: curr_B_edges_array } = get_parent_array(B_index, curr_A[i], parent, edge_indices)
@@ -260,20 +249,20 @@ function* yen_ksp_unweighted_paths(
 
                 const bucket_entry = {
                     curr_A,
-                    curr_edges_array,
+                    curr_A_edges_array,
                     curr_B,
                     curr_B_edges_array,
                     i,
                     excluded_first_hops,
                     new_curr_A: undefined,
-                    new_curr_edges_array: undefined
+                    new_curr_A_edges_array: undefined
                 }
 
                 if (len === curr_min_length) {
                     materialize_bucket_entry(bucket_entry)
                     visited[tail_index] = 0
                     state.visited_id = visited_id
-                    yield { nodes: bucket_entry.new_curr_A!, edges: bucket_entry.new_curr_edges_array! }
+                    yield { nodes: bucket_entry.new_curr_A!, edges: bucket_entry.new_curr_A_edges_array! }
                     visited_id = state.visited_id
                 }
 
@@ -301,14 +290,14 @@ function* yen_ksp_unweighted_paths(
                 for (let j = 0; j < bucket.length; ++j) {
                     const bucket_entry = bucket[j]
                     materialize_bucket_entry(bucket_entry)
-                    yield { nodes: bucket_entry.new_curr_A!, edges: bucket_entry.new_curr_edges_array! }
+                    yield { nodes: bucket_entry.new_curr_A!, edges: bucket_entry.new_curr_A_edges_array! }
                 }
                 visited_id = state.visited_id
             }
 
             startingI = bucket_entry.i
             curr_A = bucket_entry.new_curr_A!
-            curr_edges_array = bucket_entry.new_curr_edges_array!
+            curr_A_edges_array = bucket_entry.new_curr_A_edges_array!
 
             curr_excluded_first_hops = bucket_entry.excluded_first_hops
         }
